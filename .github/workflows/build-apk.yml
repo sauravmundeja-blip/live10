@@ -1,9 +1,9 @@
-name: Build LIVE10 APK
+name: Build BoreMat v0.4 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ boremat-v040-build ]
 
 jobs:
   build:
@@ -17,12 +17,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Rebuild source bundle
+      - name: Rebuild and verify source bundle
         run: |
-          cat sourceparts/part_00 sourceparts/part_01 sourceparts/part_02 sourceparts/part_03 sourceparts/part_04 | base64 -d > live10-source.zip
-          unzip -t live10-source.zip
+          cat boremat040/part_00 boremat040/part_01 boremat040/part_02_0 boremat040/part_02_1 boremat040/part_02_2 boremat040/part_03 | base64 -d > boremat-source.zip
+          unzip -t boremat-source.zip
       - name: Unpack source
-        run: unzip -o live10-source.zip
+        run: unzip -o boremat-source.zip
       - name: Build debug APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
@@ -30,6 +30,6 @@ jobs:
         run: gradle assembleDebug --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: LIVE10-debug-apk
+          name: BoreMat-v0.4-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
