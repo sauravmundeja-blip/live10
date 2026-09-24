@@ -19,7 +19,7 @@ jobs:
           gradle-version: '8.9'
       - name: Rebuild and verify source bundle
         run: |
-          cat boremat040/part_00 boremat040/part_01 boremat040/part_02_0 boremat040/part_02_1 boremat040/part_02_2 boremat040/part_03 | base64 -d > boremat-source.zip
+          cat boremat040/part_00 boremat040/part_01_0 boremat040/part_01_1 boremat040/part_01_2 boremat040/part_02_0 boremat040/part_02_1 boremat040/part_02_2 boremat040/part_03 | base64 -d > boremat-source.zip
           unzip -t boremat-source.zip
       - name: Unpack source
         run: unzip -o boremat-source.zip
