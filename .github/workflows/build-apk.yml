@@ -1,15 +1,17 @@
-name: Build LIVE10 APK
+name: Build BoreMat v0.5 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ boremat-v050-build ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -17,19 +19,45 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Rebuild source bundle
+
+      - name: Restore known-good v0.4 source
         run: |
-          cat sourceparts/part_00 sourceparts/part_01 sourceparts/part_02 sourceparts/part_03 sourceparts/part_04 | base64 -d > live10-source.zip
-          unzip -t live10-source.zip
-      - name: Unpack source
-        run: unzip -o live10-source.zip
+          git fetch origin boremat-v040-build:boremat-v040-build
+          for p in part_00 part_01_0 part_01_1 part_01_2 part_02_0 part_02_1 part_02_2 part_03; do
+            git show boremat-v040-build:boremat040/$p
+          done | base64 -d > boremat-v04.zip
+          unzip -t boremat-v04.zip
+          unzip -o boremat-v04.zip
+
+      - name: Rebuild and verify v0.5 patch
+        run: |
+          {
+            head -c 6000 boremat050/patch.b64
+            cat boremat050/patch_01
+            cat boremat050/patch_02
+            cat boremat050/patch_03
+            cat boremat050/patch_04
+            head -c 6000 boremat050/patch_05
+            cat boremat050/patch_06_exact
+          } | base64 -d > BoreMat-v0.5.patch.gz
+          echo "3dac7b64aa8baf97c3381acc4eb6b3bce22a518dac5b2f98cc1b2c2ed290097a  BoreMat-v0.5.patch.gz" | sha256sum -c -
+          gzip -dc BoreMat-v0.5.patch.gz > BoreMat-v0.5.patch
+
+      - name: Apply v0.5 changes and validate JavaScript
+        run: |
+          patch -p1 < BoreMat-v0.5.patch
+          node --check app/src/main/assets/app.js
+          grep -q "versionName '0.5.0'" app/build.gradle
+          grep -q "BoreMat/0.5" app/src/main/java/com/live10/app/MainActivity.java
+
       - name: Build debug APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: gradle assembleDebug --stacktrace
+
       - uses: actions/upload-artifact@v4
         with:
-          name: LIVE10-debug-apk
+          name: BoreMat-v0.5-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
