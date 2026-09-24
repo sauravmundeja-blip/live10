@@ -29,15 +29,47 @@ jobs:
           unzip -t boremat-v04.zip
           unzip -o boremat-v04.zip
 
+      - name: Validate transferred patch pieces
+        run: |
+          test "$(git hash-object boremat050/patch_01)" = "eef68033de4bc82575f498d6f7a44050b8384002"
+          test "$(git hash-object boremat050/patch_02)" = "9af15450f5774095d5f62b3ac9e9512d248e6139"
+          test "$(git hash-object boremat050/patch_03)" = "14fee5cc6c12fd5c8fa6e60b305befd79826db25"
+          test "$(git hash-object boremat050/patch_04)" = "f86881d5385c573c758ed6c6c729f4b63fb433ad"
+          head -c 6000 boremat050/patch_05 > /tmp/patch_05_exact
+          test "$(git hash-object /tmp/patch_05_exact)" = "ddfb3882fc76e68ba492c3a2530bcee65909779a"
+          test "$(git hash-object boremat050/patch_06_exact)" = "9ddf8db9ebfb117da2cf51cc9cc2280d7165e534"
+
+      - name: Repair one-character transfer loss in first patch piece
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, sys
+          bad = pathlib.Path('boremat050/patch_00_exact').read_bytes()
+          target = '7d276d3e4739027618c06d3860f9f5eec783da91'
+          if len(bad) != 5999:
+              raise SystemExit(f'unexpected first chunk length: {len(bad)}')
+          alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+          header = b'blob 6000\0'
+          for pos in range(len(bad)+1):
+              pre, post = bad[:pos], bad[pos:]
+              for ch in alphabet:
+                  candidate = pre + bytes([ch]) + post
+                  if hashlib.sha1(header + candidate).hexdigest() == target:
+                      pathlib.Path('/tmp/patch_00_exact').write_bytes(candidate)
+                      print('Recovered missing character at position', pos)
+                      sys.exit(0)
+          raise SystemExit('Could not deterministically recover first chunk')
+          PY
+          test "$(git hash-object /tmp/patch_00_exact)" = "7d276d3e4739027618c06d3860f9f5eec783da91"
+
       - name: Rebuild and verify v0.5 patch
         run: |
           {
-            head -c 6000 boremat050/patch.b64
+            cat /tmp/patch_00_exact
             cat boremat050/patch_01
             cat boremat050/patch_02
             cat boremat050/patch_03
             cat boremat050/patch_04
-            head -c 6000 boremat050/patch_05
+            cat /tmp/patch_05_exact
             cat boremat050/patch_06_exact
           } | base64 -d > BoreMat-v0.5.patch.gz
           echo "3dac7b64aa8baf97c3381acc4eb6b3bce22a518dac5b2f98cc1b2c2ed290097a  BoreMat-v0.5.patch.gz" | sha256sum -c -
