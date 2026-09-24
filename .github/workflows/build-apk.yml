@@ -1,9 +1,9 @@
-name: Build BoreMat v0.5 APK
+name: Build BoreMat v0.6 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ boremat-v050-build ]
+    branches: [ boremat-v060-build ]
 
 jobs:
   build:
@@ -12,10 +12,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -29,67 +31,81 @@ jobs:
           unzip -t boremat-v04.zip
           unzip -o boremat-v04.zip
 
-      - name: Validate transferred patch pieces
+      - name: Rebuild verified v0.5 base
         run: |
           test "$(git hash-object boremat050/patch_01)" = "eef68033de4bc82575f498d6f7a44050b8384002"
           test "$(git hash-object boremat050/patch_02)" = "9af15450f5774095d5f62b3ac9e9512d248e6139"
           test "$(git hash-object boremat050/patch_03)" = "14fee5cc6c12fd5c8fa6e60b305befd79826db25"
           test "$(git hash-object boremat050/patch_04)" = "f86881d5385c573c758ed6c6c729f4b63fb433ad"
-          head -c 6000 boremat050/patch_05 > /tmp/patch_05_exact
-          test "$(git hash-object /tmp/patch_05_exact)" = "ddfb3882fc76e68ba492c3a2530bcee65909779a"
+          head -c 6000 boremat050/patch_05 > /tmp/v05_patch_05
+          test "$(git hash-object /tmp/v05_patch_05)" = "ddfb3882fc76e68ba492c3a2530bcee65909779a"
           test "$(git hash-object boremat050/patch_06_exact)" = "9ddf8db9ebfb117da2cf51cc9cc2280d7165e534"
-
-      - name: Repair one-character transfer loss in first patch piece
-        run: |
           python3 - <<'PY'
           import hashlib, pathlib, sys
-          bad = pathlib.Path('boremat050/patch_00_exact').read_bytes()
-          target = '7d276d3e4739027618c06d3860f9f5eec783da91'
-          if len(bad) != 5999:
-              raise SystemExit(f'unexpected first chunk length: {len(bad)}')
-          alphabet = b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-          header = b'blob 6000\0'
+          bad=pathlib.Path('boremat050/patch_00_exact').read_bytes()
+          target='7d276d3e4739027618c06d3860f9f5eec783da91'
+          alphabet=b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+          header=b'blob 6000\0'
+          if len(bad)!=5999: raise SystemExit(f'unexpected v0.5 first chunk length {len(bad)}')
           for pos in range(len(bad)+1):
-              pre, post = bad[:pos], bad[pos:]
               for ch in alphabet:
-                  candidate = pre + bytes([ch]) + post
-                  if hashlib.sha1(header + candidate).hexdigest() == target:
-                      pathlib.Path('/tmp/patch_00_exact').write_bytes(candidate)
-                      print('Recovered missing character at position', pos)
+                  c=bad[:pos]+bytes([ch])+bad[pos:]
+                  if hashlib.sha1(header+c).hexdigest()==target:
+                      pathlib.Path('/tmp/v05_patch_00').write_bytes(c)
                       sys.exit(0)
-          raise SystemExit('Could not deterministically recover first chunk')
+          raise SystemExit('Could not recover verified v0.5 chunk')
           PY
-          test "$(git hash-object /tmp/patch_00_exact)" = "7d276d3e4739027618c06d3860f9f5eec783da91"
-
-      - name: Rebuild and verify v0.5 patch
-        run: |
           {
-            cat /tmp/patch_00_exact
+            cat /tmp/v05_patch_00
             cat boremat050/patch_01
             cat boremat050/patch_02
             cat boremat050/patch_03
             cat boremat050/patch_04
-            cat /tmp/patch_05_exact
+            cat /tmp/v05_patch_05
             cat boremat050/patch_06_exact
           } | base64 -d > BoreMat-v0.5.patch.gz
           echo "3dac7b64aa8baf97c3381acc4eb6b3bce22a518dac5b2f98cc1b2c2ed290097a  BoreMat-v0.5.patch.gz" | sha256sum -c -
           gzip -dc BoreMat-v0.5.patch.gz > BoreMat-v0.5.patch
-
-      - name: Apply v0.5 changes and validate JavaScript
-        run: |
           patch -p1 < BoreMat-v0.5.patch
           node --check app/src/main/assets/app.js
           grep -q "versionName '0.5.0'" app/build.gradle
-          grep -q "BoreMat/0.5" app/src/main/java/com/live10/app/MainActivity.java
 
-      - name: Build debug APK
+      - name: Verify and apply v0.6 reliability patch
+        run: |
+          test "$(git hash-object boremat060/patch_00)" = "5a6e31048a282d8030a54e5c1385e7324b9eb15d"
+          test "$(git hash-object boremat060/patch_01)" = "abec3f3c1604451c4dbc934bf5b358f1440792bb"
+          test "$(git hash-object boremat060/patch_02)" = "989257e6c2d26e2fa6f45daacc0be96bd4de1095"
+          test "$(git hash-object boremat060/patch_03)" = "e9295fd8f7a72fec768e0c3fddf0606414bccd75"
+          test "$(git hash-object boremat060/patch_04)" = "5d552a61d75f83323ed30fe605c1e59115dab12d"
+          cat boremat060/patch_00 boremat060/patch_01 boremat060/patch_02 boremat060/patch_03 boremat060/patch_04 | base64 -d > BoreMat-v0.6.patch.gz
+          echo "6b48bbfafc4cb9cdfdc336350123a5caffe20ff80f979869774e95082726e281  BoreMat-v0.6.patch.gz" | sha256sum -c -
+          gzip -dc BoreMat-v0.6.patch.gz > BoreMat-v0.6.patch
+          patch -p1 < BoreMat-v0.6.patch
+
+      - name: Validate v0.6 source
+        run: |
+          node --check app/src/main/assets/v06-core.js
+          node --check app/src/main/assets/v06.js
+          grep -q "versionName '0.6.0'" app/build.gradle
+          grep -q "versionCode 6" app/build.gradle
+          grep -q "BoreMat/0.6" app/src/main/java/com/live10/app/MainActivity.java
+          test -s app/boremat-test-key.b64
+          base64 -d app/boremat-test-key.b64 > app/boremat-test-key.jks
+          keytool -list -keystore app/boremat-test-key.jks -storepass boremat-test-2026 -alias boremat-test >/dev/null
+
+      - name: Build v0.6 APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: gradle assembleDebug --stacktrace
 
+      - name: Verify APK exists
+        run: |
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          unzip -t app/build/outputs/apk/debug/app-debug.apk >/dev/null
+
       - uses: actions/upload-artifact@v4
         with:
-          name: BoreMat-v0.5-apk
+          name: BoreMat-v0.6-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
