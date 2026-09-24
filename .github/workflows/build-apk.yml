@@ -17,6 +17,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Rebuild source bundle
+        run: |
+          cat sourceparts/part_00 sourceparts/part_01 sourceparts/part_02 sourceparts/part_03 sourceparts/part_04 | base64 -d > live10-source.zip
+          unzip -t live10-source.zip
       - name: Unpack source
         run: unzip -o live10-source.zip
       - name: Build debug APK
