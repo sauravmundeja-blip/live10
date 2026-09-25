@@ -175,12 +175,19 @@ jobs:
                           print('Recovered missing Base64 character at',pos)
                           return cand
               raise SystemExit('Unable to recover v0.9 runtime chunk')
-          if gitsha(bad[:6000])==target0:
-              p0=bad[:6000]; p1=recover(bad[6000:],target1)
-          elif gitsha(bad[-6000:])==target1:
-              p0=recover(bad[:-6000],target0); p1=bad[-6000:]
-          else:
-              raise SystemExit('Merged transfer does not contain a verifiable exact half')
+          found=None
+          order=list(range(max(0,5970),min(len(bad)+1,6031)))+[i for i in range(len(bad)+1) if not (5970<=i<=6030)]
+          for pos in order:
+              pre,post=bad[:pos],bad[pos:]
+              for ch in alphabet:
+                  whole=pre+bytes([ch])+post
+                  p0,p1=whole[:6000],whole[6000:]
+                  if gitsha(p0)==target0 and gitsha(p1)==target1:
+                      found=(p0,p1,pos,chr(ch));break
+              if found:break
+          if not found: raise SystemExit('Unable to recover exact merged v0.9 Base64 chunks')
+          p0,p1,pos,ch=found
+          print('Recovered merged runtime character at',pos,'value',repr(ch))
           if gitsha(p0)!=target0 or gitsha(p1)!=target1:
               raise SystemExit('Recovered v0.9 chunks failed Git blob verification')
           packed=base64.b64decode(p0+p1+tail,validate=True)
