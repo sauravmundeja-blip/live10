@@ -17,10 +17,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Rebuild BoreMat source bundle
-        run: |
-          cat sourceparts/part_00 sourceparts/part_01 sourceparts/part_02 sourceparts/part_03 sourceparts/part_04 sourceparts/part_05 sourceparts/part_06 | base64 -d > boremat-source.zip
-          unzip -t boremat-source.zip
+      - name: Verify source bundle
+        run: unzip -t boremat-source.zip
       - name: Unpack source
         run: unzip -o boremat-source.zip
       - name: Build release APK
