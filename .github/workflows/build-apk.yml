@@ -153,49 +153,43 @@ jobs:
           print("Supabase room registry smoke test passed:",code)
           PY
 
-      - name: Recover and inject QA-tested v0.9 runtime
+      - name: Reconstruct and inject exact QA-tested v0.9 runtime
         run: |
+          test "$(git hash-object boremat090/runtime00_a)" = "1def15b20658411a4615280e419f44401745a2cd"
+          test "$(git hash-object boremat090/runtime00_b)" = "22a566e078e083ac2db7c170374c08888845bce9"
+          test "$(git hash-object boremat090/runtime01_b)" = "8467a16c001fc1c47440f8344b473ae532cf1199"
           test "$(git hash-object boremat090/runtime_01)" = "651e48a9ea26bdb3550b41127bf41b427efdef54"
           python3 - <<'PY'
           import base64,hashlib,pathlib,sys
-          bad=pathlib.Path('boremat090/runtime_00').read_bytes()
-          tail=pathlib.Path('boremat090/runtime_01').read_bytes()
-          target0='1ef0f116178e75531fbd8b27e36699f51d03d63d'
-          target1='653b96f2106c0d9ff9673301f45e2733c8a30d72'
+          broken=pathlib.Path('boremat090/runtime01_a').read_bytes()
+          target='baedbc22b01e092ab5b84797648624a37017ead1'
           alphabet=b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
           def gitsha(data):
               return hashlib.sha1((f'blob {len(data)}\\0').encode()+data).hexdigest()
-          def recover(broken,target):
-              if len(broken)!=5999: raise SystemExit(f'unexpected broken length {len(broken)}')
-              for pos in range(len(broken)+1):
-                  pre,post=broken[:pos],broken[pos:]
-                  for ch in alphabet:
-                      cand=pre+bytes([ch])+post
-                      if gitsha(cand)==target:
-                          print('Recovered missing Base64 character at',pos)
-                          return cand
-              raise SystemExit('Unable to recover v0.9 runtime chunk')
-          found=None
-          order=list(range(max(0,5970),min(len(bad)+1,6031)))+[i for i in range(len(bad)+1) if not (5970<=i<=6030)]
-          for pos in order:
-              pre,post=bad[:pos],bad[pos:]
+          if len(broken)!=2999: raise SystemExit(f'unexpected runtime01_a length {len(broken)}')
+          fixed=None
+          for pos in range(len(broken)+1):
+              pre,post=broken[:pos],broken[pos:]
               for ch in alphabet:
-                  whole=pre+bytes([ch])+post
-                  p0,p1=whole[:6000],whole[6000:]
-                  if gitsha(p0)==target0 and gitsha(p1)==target1:
-                      found=(p0,p1,pos,chr(ch));break
-              if found:break
-          if not found: raise SystemExit('Unable to recover exact merged v0.9 Base64 chunks')
-          p0,p1,pos,ch=found
-          print('Recovered merged runtime character at',pos,'value',repr(ch))
-          if gitsha(p0)!=target0 or gitsha(p1)!=target1:
-              raise SystemExit('Recovered v0.9 chunks failed Git blob verification')
-          packed=base64.b64decode(p0+p1+tail,validate=True)
+                  cand=pre+bytes([ch])+post
+                  if gitsha(cand)==target:
+                      fixed=cand;print('Recovered exact runtime01_a character at',pos);break
+              if fixed:break
+          if fixed is None: raise SystemExit('Could not recover runtime01_a exactly')
+          parts=[
+              pathlib.Path('boremat090/runtime00_a').read_bytes(),
+              pathlib.Path('boremat090/runtime00_b').read_bytes(),
+              fixed,
+              pathlib.Path('boremat090/runtime01_b').read_bytes(),
+              pathlib.Path('boremat090/runtime_01').read_bytes()
+          ]
+          b64=b''.join(parts)
+          packed=base64.b64decode(b64,validate=True)
           expected='0a2351745415df01fd050aa6123e9f77ef26ea8d34a61e09d1f6a6b53196661b'
           got=hashlib.sha256(packed).hexdigest()
           if got!=expected: raise SystemExit(f'v0.9 runtime SHA mismatch {got}')
           pathlib.Path('/tmp/BoreMat-v0.9-runtime.tar.gz').write_bytes(packed)
-          print('Verified v0.9 runtime SHA',got)
+          print('Verified exact v0.9 runtime SHA',got)
           PY
           tar -xzf /tmp/BoreMat-v0.9-runtime.tar.gz -C app/src/main/assets
           python3 - <<'PY'
