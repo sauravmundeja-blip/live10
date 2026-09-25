@@ -1,9 +1,9 @@
-name: Build BoreMat v0.8 APK
+name: Build BoreMat v0.9 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ boremat-v080-build ]
+    branches: [ boremat-v090-build ]
 
 jobs:
   build:
@@ -153,7 +153,85 @@ jobs:
           print("Supabase room registry smoke test passed:",code)
           PY
 
-      - name: Build v0.8 APK
+      - name: Recover and inject QA-tested v0.9 runtime
+        run: |
+          test "$(git hash-object boremat090/runtime_01)" = "651e48a9ea26bdb3550b41127bf41b427efdef54"
+          python3 - <<'PY'
+          import base64,hashlib,pathlib,sys
+          bad=pathlib.Path('boremat090/runtime_00').read_bytes()
+          tail=pathlib.Path('boremat090/runtime_01').read_bytes()
+          target0='1ef0f116178e75531fbd8b27e36699f51d03d63d'
+          target1='653b96f2106c0d9ff9673301f45e2733c8a30d72'
+          alphabet=b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+          def gitsha(data):
+              return hashlib.sha1((f'blob {len(data)}\\0').encode()+data).hexdigest()
+          def recover(broken,target):
+              if len(broken)!=5999: raise SystemExit(f'unexpected broken length {len(broken)}')
+              for pos in range(len(broken)+1):
+                  pre,post=broken[:pos],broken[pos:]
+                  for ch in alphabet:
+                      cand=pre+bytes([ch])+post
+                      if gitsha(cand)==target:
+                          print('Recovered missing Base64 character at',pos)
+                          return cand
+              raise SystemExit('Unable to recover v0.9 runtime chunk')
+          if gitsha(bad[:6000])==target0:
+              p0=bad[:6000]; p1=recover(bad[6000:],target1)
+          elif gitsha(bad[-6000:])==target1:
+              p0=recover(bad[:-6000],target0); p1=bad[-6000:]
+          else:
+              raise SystemExit('Merged transfer does not contain a verifiable exact half')
+          if gitsha(p0)!=target0 or gitsha(p1)!=target1:
+              raise SystemExit('Recovered v0.9 chunks failed Git blob verification')
+          packed=base64.b64decode(p0+p1+tail,validate=True)
+          expected='0a2351745415df01fd050aa6123e9f77ef26ea8d34a61e09d1f6a6b53196661b'
+          got=hashlib.sha256(packed).hexdigest()
+          if got!=expected: raise SystemExit(f'v0.9 runtime SHA mismatch {got}')
+          pathlib.Path('/tmp/BoreMat-v0.9-runtime.tar.gz').write_bytes(packed)
+          print('Verified v0.9 runtime SHA',got)
+          PY
+          tar -xzf /tmp/BoreMat-v0.9-runtime.tar.gz -C app/src/main/assets
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/assets/index.html')
+          s=p.read_text()
+          if '<script src="v09.js"></script>' not in s:
+              s=s.replace('<script src="v08.js"></script>','<script src="v08.js"></script>\n  <script src="v09.js"></script>')
+          p.write_text(s)
+          p=Path('app/src/main/assets/live10.html')
+          s=p.read_text()
+          if '<script src="live09.js"></script>' not in s:
+              s=s.replace('<script src="live10.js"></script>','<script src="live10.js"></script>\n<script src="live09.js"></script>')
+          p.write_text(s)
+          p=Path('app/build.gradle')
+          s=p.read_text().replace('versionCode 8','versionCode 9').replace("versionName '0.8.0'","versionName '0.9.0'")
+          p.write_text(s)
+          p=Path('app/src/main/java/com/live10/app/MainActivity.java')
+          s=p.read_text().replace('BoreMat/0.8','BoreMat/0.9')
+          p.write_text(s)
+          PY
+          node --check app/src/main/assets/v09.js
+          node --check app/src/main/assets/live09.js
+          grep -q '<script src="v09.js"></script>' app/src/main/assets/index.html
+          grep -q '<script src="live09.js"></script>' app/src/main/assets/live10.html
+          grep -q "versionName '0.9.0'" app/build.gradle
+          grep -q "versionCode 9" app/build.gradle
+          grep -q "BoreMat/0.9" app/src/main/java/com/live10/app/MainActivity.java
+          grep -q "Test Wolf without 5 phones" app/src/main/assets/v09.js
+          grep -q "Include Doctor" app/src/main/assets/v09.js
+          grep -q "Include Police / Detective" app/src/main/assets/v09.js
+
+      - name: Package exact v0.9 source snapshot
+        run: |
+          zip -qr BoreMat-v0.9-source.zip app build.gradle settings.gradle README.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BoreMat-v0.9-source
+          path: BoreMat-v0.9-source.zip
+          if-no-files-found: error
+
+      - name: Build v0.9 APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -166,6 +244,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BoreMat-v0.8-apk
+          name: BoreMat-v0.9-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
