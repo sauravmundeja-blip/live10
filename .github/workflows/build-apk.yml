@@ -157,37 +157,46 @@ jobs:
         run: |
           test "$(git hash-object boremat090/runtime00_a)" = "1def15b20658411a4615280e419f44401745a2cd"
           test "$(git hash-object boremat090/runtime00_b)" = "22a566e078e083ac2db7c170374c08888845bce9"
+          test "$(git hash-object boremat090/runtime01_a2)" = "d6e5c39af0ebba543e37b16861bf2c5830af1300"
           test "$(git hash-object boremat090/runtime01_b)" = "8467a16c001fc1c47440f8344b473ae532cf1199"
           test "$(git hash-object boremat090/runtime_01)" = "651e48a9ea26bdb3550b41127bf41b427efdef54"
           python3 - <<'PY'
-          import base64,hashlib,pathlib,sys
-          broken=pathlib.Path('boremat090/runtime01_a').read_bytes()
-          target='baedbc22b01e092ab5b84797648624a37017ead1'
+          import base64,hashlib,pathlib
+          broken=pathlib.Path('boremat090/runtime01_a1').read_bytes()
+          target='b99756a725e85102970ee7f68ebc5bdbd3a0ff3b'
           alphabet=b'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
           def gitsha(data):
               return hashlib.sha1((f'blob {len(data)}\\0').encode()+data).hexdigest()
-          if len(broken)!=2999: raise SystemExit(f'unexpected runtime01_a length {len(broken)}')
+          if len(broken)!=1499:
+              raise SystemExit(f'unexpected runtime01_a1 length {len(broken)}')
           fixed=None
           for pos in range(len(broken)+1):
               pre,post=broken[:pos],broken[pos:]
               for ch in alphabet:
                   cand=pre+bytes([ch])+post
                   if gitsha(cand)==target:
-                      fixed=cand;print('Recovered exact runtime01_a character at',pos);break
-              if fixed:break
-          if fixed is None: raise SystemExit('Could not recover runtime01_a exactly')
-          parts=[
+                      fixed=cand
+                      print('Recovered exact runtime01_a1 character at',pos)
+                      break
+              if fixed: break
+          if fixed is None:
+              raise SystemExit('Could not recover runtime01_a1 exactly')
+          pieces=[
               pathlib.Path('boremat090/runtime00_a').read_bytes(),
               pathlib.Path('boremat090/runtime00_b').read_bytes(),
               fixed,
+              pathlib.Path('boremat090/runtime01_a2').read_bytes(),
               pathlib.Path('boremat090/runtime01_b').read_bytes(),
-              pathlib.Path('boremat090/runtime_01').read_bytes()
+              pathlib.Path('boremat090/runtime_01').read_bytes(),
           ]
-          b64=b''.join(parts)
+          b64=b''.join(pieces)
+          if len(b64)!=16680:
+              raise SystemExit(f'unexpected reconstructed Base64 length {len(b64)}')
           packed=base64.b64decode(b64,validate=True)
           expected='0a2351745415df01fd050aa6123e9f77ef26ea8d34a61e09d1f6a6b53196661b'
           got=hashlib.sha256(packed).hexdigest()
-          if got!=expected: raise SystemExit(f'v0.9 runtime SHA mismatch {got}')
+          if got!=expected:
+              raise SystemExit(f'v0.9 runtime SHA mismatch {got}')
           pathlib.Path('/tmp/BoreMat-v0.9-runtime.tar.gz').write_bytes(packed)
           print('Verified exact v0.9 runtime SHA',got)
           PY
