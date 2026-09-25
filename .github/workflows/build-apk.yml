@@ -1,9 +1,9 @@
-name: Build BoreMat v0.9 APK
+name: Build BoreMat v0.10 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [ boremat-v090-build ]
+    branches: [ boremat-v010-build ]
 
 jobs:
   build:
@@ -231,17 +231,63 @@ jobs:
           grep -q "Include Doctor" app/src/main/assets/v09.js
           grep -q "Include Police / Detective" app/src/main/assets/v09.js
 
-      - name: Package exact v0.9 source snapshot
+      - name: Verify and overlay exact v0.10 source
         run: |
-          zip -qr BoreMat-v0.9-source.zip app build.gradle settings.gradle README.md
+          test "$(git hash-object boremat010/part_00)" = "1831ebed724d9f6b880b9ea50cda1ba8cb510ab9"
+          test "$(git hash-object boremat010/part_01)" = "f4ecb07659f11f36a359167eb103d1b43937e8cb"
+          test "$(git hash-object boremat010/part_02)" = "4448d504e127a63dbdc82bc522ea4dd728bb83b5"
+          test "$(git hash-object boremat010/part_03)" = "f97ec775c70cf8da5ff977a5b083d8fdf095cc03"
+          test "$(git hash-object boremat010/part_04)" = "e68027d6f0c7941981f89fb0ca4c8b8801bf687e"
+          test "$(git hash-object boremat010/part_05)" = "08349316a710d57d55b9dafc62e36ddc07df47bc"
+          test "$(git hash-object boremat010/part_06)" = "38535331abbdfe2c2089e1e44ae7b8b8bc2c32a0"
+          test "$(git hash-object boremat010/part_07)" = "87915e2103ecd1e9da3f6dcec9e16d9df2acaedb"
+          test "$(git hash-object boremat010/part_08)" = "3ce0580a664cf92bcf3b159ece295ac2edd41b4a"
+          test "$(git hash-object boremat010/part_09)" = "65a63d08d3997acaff7f86a06d04099c3c746817"
+          test "$(git hash-object boremat010/part_10)" = "99e7ad0eb1ff67f69c9d5252be85f2eca3826c76"
+          cat boremat010/part_00 boremat010/part_01 boremat010/part_02 boremat010/part_03 boremat010/part_04 boremat010/part_05 boremat010/part_06 boremat010/part_07 boremat010/part_08 boremat010/part_09 boremat010/part_10 | base64 -d > /tmp/BoreMat-v0.10-override.tar.gz
+          echo "88d6400055d928dc490eac9ce74df6f4e6c5f0dfda7ae70aea4682aea721e0ed  /tmp/BoreMat-v0.10-override.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/BoreMat-v0.10-override.tar.gz
+          echo "e788e7e1d2b06eba8c43ebc7a25718f3acf2abbbb315f90baea733254fad7e46  app/src/main/assets/v09.js" | sha256sum -c -
+          echo "8e6c4b308d9d93447d18fb0025a858a235a6a52dfecbbc7b4cc070e8d65e7019  app/src/main/java/com/live10/app/MainActivity.java" | sha256sum -c -
+          echo "ca74f0a9c72fa77ef1d92094e5e39a81af0e8cfa5c784e42a0acd2de29308721  app/build.gradle" | sha256sum -c -
+          node --check app/src/main/assets/v09.js
+          grep -q "versionName '0.10.0'" app/build.gradle
+          grep -q "versionCode 10" app/build.gradle
+          grep -q "BoreMat/0.10" app/src/main/java/com/live10/app/MainActivity.java
+          grep -q "ProfileBridge" app/src/main/java/com/live10/app/MainActivity.java
+          grep -q "LIVE10_SCHEDULE_URL" app/src/main/assets/v09.js
+          grep -q "isStrictTwo09" app/src/main/assets/v09.js
+          grep -q "fooledPairs" app/src/main/assets/v09.js
+          grep -q "UPI_QR_BITS09" app/src/main/assets/v09.js
+          grep -q "headsQuickTest09" app/src/main/assets/v09.js
+          test -s app/boremat-test-key.jks
+          keytool -list -keystore app/boremat-test-key.jks -storepass boremat-test-2026 -alias boremat-test >/dev/null
+
+      - name: Live LIVE10 schedule smoke test
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.request,pathlib
+          src=pathlib.Path("app/src/main/assets/v08.js").read_text()
+          key=re.search(r"BM_PUBLISHABLE_KEY='([^']+)'",src).group(1)
+          url='https://uebmnsprvqrsxxabocit.supabase.co/rest/v1/boremat_live_schedule?show_key=eq.live10&select=show_key,title,start_at,status'
+          req=urllib.request.Request(url,headers={'apikey':key})
+          with urllib.request.urlopen(req,timeout=20) as r: rows=json.loads(r.read().decode())
+          assert len(rows)==1 and rows[0]['show_key']=='live10'
+          assert rows[0]['status'] in ('off','scheduled','live')
+          print('LIVE10 schedule smoke passed:',rows[0]['status'])
+          PY
+
+      - name: Package exact v0.10 source snapshot
+        run: |
+          zip -qr BoreMat-v0.10-source.zip app build.gradle settings.gradle README.md
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BoreMat-v0.9-source
-          path: BoreMat-v0.9-source.zip
+          name: BoreMat-v0.10-source
+          path: BoreMat-v0.10-source.zip
           if-no-files-found: error
 
-      - name: Build v0.9 APK
+      - name: Build v0.10 APK
         env:
           ANDROID_HOME: /usr/local/lib/android/sdk
           ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
@@ -254,6 +300,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BoreMat-v0.9-apk
+          name: BoreMat-v0.10-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
